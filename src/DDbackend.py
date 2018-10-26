@@ -138,7 +138,7 @@ class DaisyDriver(Serial):
 			self.flush()
 			
 	def get_light_sensor_val(self, figure_update_function):
-		with self.DDlock:
+		if self.DDlock.acquire(timeout=1.0):
 			self.flush()
 			command = 'NET 1 LTM \r'
 			print(command)
@@ -168,8 +168,9 @@ class DaisyDriver(Serial):
 				print(command)
 				bytes_command = command.encode('utf-8')
 				self.write(bytes_command)
-				#~ self.readline()
-
+				#~ sleep(SOME TIME CALCULATED ACCORDING TO MOVE DISTANCE!)
+			
+			self.DDlock.relase()
 
 		
 
