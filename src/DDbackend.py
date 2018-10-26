@@ -1,5 +1,6 @@
 from serial import Serial
 from threading import Thread, Lock
+from time import sleep
 
 class DaisyDriver(Serial):
 	
@@ -14,7 +15,7 @@ class DaisyDriver(Serial):
 			self.speedset(2)
 			
 			# initialise jog lock
-			self.joglock = Lock()
+			self.DDlock = Lock()
 			
 			# initialise direction dictionary, f = forward, fl = forward left etc...
 			self.directions = {'l':(0, -1, 0),
@@ -34,7 +35,15 @@ class DaisyDriver(Serial):
 			
 		# state value of light, assumes on then switches off
 		self.lightval = 1
-		self.light_off()					
+		self.light_off()
+		
+		self.lightAVG = [0]*5
+		self.lightAVGindx = 0
+		
+		self.MOVAVGLEN = 50
+		self.MOVAVG = [0]*self.MOVAVGLEN
+		self.MOVAVGindx = 0
+		
 		
 	def speedset(self, val):
 		# speed val
@@ -58,7 +67,7 @@ class DaisyDriver(Serial):
 		
 	def __jogdo(self, x, y, z):
 		# enable lock
-		with self.joglock:
+		with self.DDlock:
 						
 			# flush buffer
 			self.flush()
@@ -91,7 +100,7 @@ class DaisyDriver(Serial):
 		
 	def jog(self, direction, button_handle):
 		# if not locked then jog
-		if not self.joglock.locked():
+		if not self.DDlock.locked():
 			# get direction vector
 			dir_tuple = self.directions[direction]
 			# start jog
@@ -128,5 +137,39 @@ class DaisyDriver(Serial):
 			# flush buffer
 			self.flush()
 			
+	def get_light_sensor_val(self, figure_update_function):
+		with self.DDlock:
+			self.flush()
+			command = 'NET 1 LTM \r'
+			print(command)
+			bytes_command = command.encode('utf-8')
+			self.write(bytes_command)
+			
+			val = int(self.readline().decode("utf-8"))
+			
+			if val>=50:
+				val=49
+			
+			self.lightAVG[self.lightAVGindx] = val
+			self.lightAVGindx = (self.lightAVGindx + 1)%5
+			
+			self.MOVAVG[self.MOVAVGindx] = val
+			self.MOVAVGindx = (self.MOVAVGindx + 1)%self.MOVAVGLEN
+			
+			lightavg = sum(self.lightAVG)/5
+			
+			movavg = sum(self.MOVAVG)/self.MOVAVGLEN
+			
+			figure_update_function(lightavg)
+			
+			if self.MOVAVGindx%25==0:
+				sleep(100e-3)
+				command = 'NET 2 MOV {x_} {x_} {x_} \r'.format(x_=int(movavg*80))
+				print(command)
+				bytes_command = command.encode('utf-8')
+				self.write(bytes_command)
+				#~ self.readline()
+
+
 		
 
